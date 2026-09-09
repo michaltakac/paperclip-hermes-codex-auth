@@ -114,7 +114,7 @@ on a missing `esbuild`.
 
 ## Status
 
-Early. Tested against Hermes Agent 0.18.2 with the `hermes_local` adapter. The device-code
+Tested against Hermes Agent 0.18.2 with the `hermes_local` adapter. The device-code
 flow is undocumented upstream and could change without notice.
 
 ## License
