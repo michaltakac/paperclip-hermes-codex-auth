@@ -1,0 +1,40 @@
+{
+  "name": "paperclip-hermes-codex-auth",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Sign a Hermes agent in to OpenAI Codex from the Paperclip UI. Drives `hermes auth add openai-codex` on a pseudo-terminal, per Hermes profile, so each agent holds its own OAuth credential instead of sharing one.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/michaltakac/paperclip-hermes-codex-auth.git"
+  },
+  "scripts": {
+    "build": "node ./esbuild.config.mjs",
+    "dev": "node ./esbuild.config.mjs --watch",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build && npm run typecheck && npm test"
+  },
+  "paperclipPlugin": {
+    "manifest": "./dist/manifest.js",
+    "worker": "./dist/worker.js",
+    "ui": "./dist/ui/"
+  },
+  "files": ["dist", "README.md", "LICENSE", "package.json"],
+  "keywords": ["paperclip", "plugin", "hermes", "hermes-agent", "codex", "openai", "auth", "oauth"],
+  "peerDependencies": {
+    "@paperclipai/plugin-sdk": ">=2026.707.0"
+  },
+  "devDependencies": {
+    "@paperclipai/plugin-sdk": "2026.707.0",
+    "@types/node": "^26.4.0",
+    "@types/react": "^19.2.18",
+    "esbuild": "^0.28.2",
+    "react": "^19.2.8",
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.11"
+  },
+  "engines": { "node": ">=20" },
+  "homepage": "https://github.com/michaltakac/paperclip-hermes-codex-auth#readme",
+  "bugs": { "url": "https://github.com/michaltakac/paperclip-hermes-codex-auth/issues" }
+}
