@@ -29,7 +29,7 @@ export const ACTIONS = {
 const manifest: PaperclipPluginManifestV1 = {
   id: "ordillect.hermes-codex-auth",
   apiVersion: 1,
-  version: "1.0.0",
+  version: "1.0.1",
   displayName: "Hermes Codex Sign-in",
   description:
     "Sign a Hermes agent in to OpenAI Codex from the Paperclip UI. Runs the device-code login per Hermes profile, so each agent holds its own credential rather than sharing one that rotates.",
@@ -53,8 +53,9 @@ const manifest: PaperclipPluginManifestV1 = {
       hermesPath: {
         type: "string",
         title: "Path to the Hermes CLI",
-        description: "Absolute path to the `hermes` executable inside the Paperclip runtime.",
-        default: "/usr/local/bin/hermes",
+        description:
+          "Absolute path to the `hermes` executable. Leave blank to auto-detect: a virtualenv install at <venv>/bin/hermes is tried before PATH.",
+        default: "",
       },
       profilesRoot: {
         type: "string",

@@ -79,7 +79,7 @@ export async function verifyProfile(options: VerifyOptions): Promise<VerifyResul
         const out = String(stdout ?? "");
         const err = String(stderr ?? "");
         if (error && (error as NodeJS.ErrnoException).code === "ENOENT") {
-          resolve({ ok: false, reason: "The Hermes executable was not found." });
+          resolve({ ok: false, reason: `The Hermes executable was not found at ${hermesPath}.` });
           return;
         }
         if (error && "killed" in error && (error as { killed?: boolean }).killed) {

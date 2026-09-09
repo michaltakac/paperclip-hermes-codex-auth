@@ -48,7 +48,7 @@ Then Settings → Plugins → **Hermes Codex Sign-in**.
 
 | Setting | Default | Notes |
 |---|---|---|
-| `hermesPath` | `/usr/local/bin/hermes` | The `hermes` executable inside the Paperclip runtime. A venv install is common — point this at `<venv>/bin/hermes`. |
+| `hermesPath` | *(auto-detect)* | Leave blank and the plugin tries `/paperclip/hermes-venv/bin/hermes`, then the usual system paths, then `PATH`. Set it explicitly if Hermes lives elsewhere. |
 | `profilesRoot` | `/paperclip/.hermes/profiles` | One subdirectory per profile. Each is used verbatim as `HERMES_HOME`. |
 | `scriptPath` | `/usr/bin/script` | util-linux `script`, used to allocate the PTY. |
 | `verify` | `true` | Run a real round trip after signing in. Leave it on; see below. |
@@ -86,6 +86,12 @@ refresh token, which is why there is no code path that can leak one.
 **The device code is redacted** from every transcript and log. While a flow is open it is
 a live second factor, so a sign-in is owned by the person who started it and another
 principal cannot poll it.
+
+**Hermes is usually not on `PATH`.** It is commonly a Python virtualenv install, so the
+executable never lands in `/usr/local/bin`. A wrong path is not merely inconvenient: it
+surfaces as "executable not found" against a profile the panel has just badged *Signed
+in*, which reads as a broken credential rather than a missing setting. So the path is
+auto-detected, and when detection fails the error names every location tried.
 
 **A rebuilt bundle does not reload** until the plugin is disabled and re-enabled. The
 worker logs its version at startup so "which build is live" is answerable from the logs.

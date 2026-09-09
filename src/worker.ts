@@ -20,6 +20,7 @@ import {
 } from "./hermes/profiles.js";
 import { startAuthSession, type AuthSession } from "./hermes/session.js";
 import { verifyProfile } from "./hermes/verify.js";
+import { describeMissingHermes, locateHermes } from "./hermes/locate.js";
 import type { AuthPhase } from "./hermes/parse.js";
 
 interface ResolvedConfig {
@@ -118,7 +119,17 @@ function toPublic(phase: AuthPhase, profile: string): PublicStatus {
   }
 }
 
-let cachedConfig: ResolvedConfig | null = null;
+let cachedConfig: { value: ResolvedConfig; at: number } | null = null;
+
+/**
+ * Config is cached, but only briefly.
+ *
+ * An indefinite cache is a trap: an operator corrects a wrong path in Settings,
+ * the worker keeps serving the value it read minutes ago, and the fix appears
+ * not to work until the plugin is disabled and re-enabled. A few seconds is
+ * enough to spare the polling loop a read per tick without outliving a change.
+ */
+const CONFIG_TTL_MS = 5_000;
 
 /**
  * Resolve operator config lazily, inside a request.
@@ -135,7 +146,7 @@ async function resolveConfig(ctx: {
   config: { get(): Promise<Record<string, unknown>> };
   logger: { warn(message: string, meta?: unknown): void };
 }): Promise<ResolvedConfig> {
-  if (cachedConfig) return cachedConfig;
+  if (cachedConfig && Date.now() - cachedConfig.at < CONFIG_TTL_MS) return cachedConfig.value;
 
   let raw: Record<string, unknown> = {};
   try {
@@ -144,13 +155,14 @@ async function resolveConfig(ctx: {
     ctx.logger.warn("Could not read plugin config; using defaults.", { error: String(error) });
   }
 
-  cachedConfig = {
+  const value: ResolvedConfig = {
     hermesPath: str(raw.hermesPath) ?? DEFAULTS.hermesPath,
     profilesRoot: str(raw.profilesRoot) ?? DEFAULTS.profilesRoot,
     scriptPath: str(raw.scriptPath) ?? DEFAULTS.scriptPath,
     verify: typeof raw.verify === "boolean" ? raw.verify : DEFAULTS.verify,
   };
-  return cachedConfig;
+  cachedConfig = { value, at: Date.now() };
+  return value;
 }
 
 export function createHermesCodexAuthPlugin() {
@@ -187,8 +199,11 @@ export function createHermesCodexAuthPlugin() {
         const target = (await listProfiles(cfg.profilesRoot)).find((p) => p.name === name);
         if (!target) throw new Error(`No Hermes profile named "${name}" was found.`);
 
+        const located = await locateHermes(cfg.hermesPath);
+        if (!located.ok) throw new Error(describeMissingHermes(located.tried));
+
         const session = startAuthSession({
-          hermesPath: cfg.hermesPath,
+          hermesPath: located.path,
           scriptPath: cfg.scriptPath,
           profilePath: target.path,
           profilesRoot: cfg.profilesRoot,
@@ -215,7 +230,7 @@ export function createHermesCodexAuthPlugin() {
           // Presence is not validity — see hermes/verify.ts.
           entry.verifying = true;
           const result = await verifyProfile({
-            hermesPath: cfg.hermesPath,
+            hermesPath: located.path,
             profilePath: target.path,
           });
           entry.verifying = false;
@@ -261,7 +276,9 @@ export function createHermesCodexAuthPlugin() {
         if (!target.hasCredential) {
           return { ok: false, reason: "That profile has no stored Codex credential yet." };
         }
-        return await verifyProfile({ hermesPath: cfg.hermesPath, profilePath: target.path });
+        const located = await locateHermes(cfg.hermesPath);
+        if (!located.ok) return { ok: false, reason: describeMissingHermes(located.tried) };
+        return await verifyProfile({ hermesPath: located.path, profilePath: target.path });
       });
 
       ctx.actions.register(ACTIONS.diagnostics, async (_input, context) => {
