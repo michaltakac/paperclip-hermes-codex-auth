@@ -26,6 +26,7 @@ import {
   usePluginToast,
 } from "@paperclipai/plugin-sdk/ui";
 import type { PluginWidgetProps } from "@paperclipai/plugin-sdk/ui";
+import { findSelf, upgradeSelf, type SelfInfo } from "./update.js";
 
 interface Profile {
   name: string;
@@ -251,6 +252,7 @@ function Panel({ companyId }: { companyId: string }) {
   return (
     <div style={{ padding: 16, maxWidth: 720 }}>
       <h2 style={{ marginTop: 0 }}>Hermes Codex Sign-in</h2>
+      <UpdateRow toast={toast} />
       <p style={MUTED}>
         Each Hermes profile holds its own OpenAI Codex credential. Sign in once per profile — a
         Codex refresh token rotates, so two agents sharing one copy will eventually sign each
@@ -313,6 +315,104 @@ function Panel({ companyId }: { companyId: string }) {
             </div>
           </div>
         ))
+      )}
+    </div>
+  );
+}
+
+/**
+ * Version and update control.
+ *
+ * Paperclip has no UI for upgrading an installed plugin — the endpoint and the
+ * host's own API client both exist, but nothing calls them — so a plugin that
+ * ships a fix has no way to reach the people running it. This row is the
+ * stopgap: it reads the installed version from the host, asks npm what the
+ * latest is, and offers the upgrade the host already knows how to perform.
+ */
+function UpdateRow({ toast }: { toast: ReturnType<typeof usePluginToast> }) {
+  const [self, setSelf] = useState<SelfInfo | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setSelf(await findSelf());
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not read the plugin's version.");
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const onUpdate = useCallback(async () => {
+    if (!self) return;
+    setBusy(true);
+    try {
+      const outcome = await upgradeSelf(self.id);
+      if (outcome.kind === "approval_required") {
+        toast({
+          title: "Update needs approval",
+          body: "The new version requests capabilities the installed one did not. An instance administrator has to approve it.",
+          tone: "error",
+        });
+      } else {
+        // The running UI is still the old bundle: the host swapped the worker
+        // underneath it. Saying so is more honest than silently looking fine.
+        setDone(true);
+        toast({
+          title: "Updated",
+          body: "Reload the page to load the new plugin UI.",
+          tone: "success",
+        });
+      }
+    } catch (e) {
+      toast({
+        title: "Update failed",
+        body: e instanceof Error ? e.message : "The upgrade did not complete.",
+        tone: "error",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }, [self, toast]);
+
+  if (error) return <div style={{ ...MUTED, marginBottom: 12 }}>{error}</div>;
+  if (!self) return null;
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        flexWrap: "wrap",
+        marginBottom: 16,
+        paddingBottom: 12,
+        borderBottom: "1px solid var(--border, #3f3f46)",
+      }}
+    >
+      <span style={MUTED}>Version {self.installedVersion}</span>
+      {done ? (
+        <button type="button" style={PRIMARY} onClick={() => window.location.reload()}>
+          Reload to finish
+        </button>
+      ) : (
+        <>
+          {self.updateAvailable && self.latestVersion ? (
+            <StatusBadge label={`${self.latestVersion} available`} status="info" />
+          ) : self.latestVersion ? (
+            <span style={MUTED}>Up to date</span>
+          ) : (
+            <span style={MUTED}>Could not reach the registry</span>
+          )}
+          <button type="button" style={SECONDARY} disabled={busy} onClick={() => void onUpdate()}>
+            {busy ? "Updating…" : self.updateAvailable ? "Update" : "Check and update"}
+          </button>
+        </>
       )}
     </div>
   );

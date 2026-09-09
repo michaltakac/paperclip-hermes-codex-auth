@@ -29,7 +29,7 @@ export const ACTIONS = {
 const manifest: PaperclipPluginManifestV1 = {
   id: "ordillect.hermes-codex-auth",
   apiVersion: 1,
-  version: "1.0.1",
+  version: "1.1.0",
   displayName: "Hermes Codex Sign-in",
   description:
     "Sign a Hermes agent in to OpenAI Codex from the Paperclip UI. Runs the device-code login per Hermes profile, so each agent holds its own credential rather than sharing one that rotates.",

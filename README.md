@@ -53,6 +53,29 @@ Then Settings → Plugins → **Hermes Codex Sign-in**.
 | `scriptPath` | `/usr/bin/script` | util-linux `script`, used to allocate the PTY. |
 | `verify` | `true` | Run a real round trip after signing in. Leave it on; see below. |
 
+## Updating
+
+The panel shows the installed version and offers an **Update** button.
+
+This exists because Paperclip has no plugin-update UI. The host implements
+upgrade fully — `POST /api/plugins/:id/upgrade` deactivates the runtime, downloads
+and validates the new package, diffs the manifest capabilities, and either parks the
+plugin in `upgrade_pending` for operator approval or returns it to ready and
+reactivates — and `pluginsApi.upgrade()` exists in the host's own API client. Nothing
+calls it. So an installed plugin otherwise has no way to ship a fix to the people
+running it.
+
+The upgrade runs as the signed-in human, from plugin UI that is same-origin with the
+Paperclip app, and needs instance-admin rights. It is deliberately **not** done from
+the worker: a worker-side upgrade would be the plugin escalating itself.
+
+After a successful update the running page still holds the old UI bundle — the host
+swapped the worker underneath it — so the button turns into **Reload to finish**.
+
+If the new version requests capabilities the installed one did not, the host holds it
+in `upgrade_pending` for an administrator. That is the capability gate working, and the
+panel says so rather than reporting a failure.
+
 ## Design notes
 
 **A PTY is mandatory.** Run with pipe stdio, the login emits *zero bytes* and waits — the

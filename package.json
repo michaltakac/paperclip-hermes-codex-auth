@@ -1,6 +1,6 @@
 {
   "name": "paperclip-hermes-codex-auth",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "type": "module",
   "description": "Sign a Hermes agent in to OpenAI Codex from the Paperclip UI. Drives `hermes auth add openai-codex` on a pseudo-terminal, per Hermes profile, so each agent holds its own OAuth credential instead of sharing one.",
   "license": "MIT",
