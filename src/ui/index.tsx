@@ -26,7 +26,8 @@ import {
   usePluginToast,
 } from "@paperclipai/plugin-sdk/ui";
 import type { PluginWidgetProps } from "@paperclipai/plugin-sdk/ui";
-import { findSelf, upgradeSelf, type SelfInfo } from "./update.js";
+import { errorMessage } from "./errors.js";
+import { findSelf, isNewer, upgradeSelf, type SelfInfo } from "./update.js";
 
 interface Profile {
   name: string;
@@ -137,7 +138,7 @@ function Panel({ companyId }: { companyId: string }) {
       setProfiles(result.profiles ?? []);
       setProfilesRoot(result.profilesRoot ?? "");
     } catch (error) {
-      toast({ title: "Could not read Hermes profiles", body: error instanceof Error ? error.message : "", tone: "error" });
+      toast({ title: "Could not read Hermes profiles", body: errorMessage(error, ""), tone: "error" });
       setProfiles([]);
     }
   }, [listProfiles, toast]);
@@ -176,7 +177,7 @@ function Panel({ companyId }: { companyId: string }) {
         }
       } catch (error) {
         if (cancelled) return;
-        setStatus({ state: "failed", reason: error instanceof Error ? error.message : "Poll failed." });
+        setStatus({ state: "failed", reason: errorMessage(error, "Poll failed.") });
         setBusy(null);
       }
     }, POLL_MS);
@@ -207,7 +208,7 @@ function Panel({ companyId }: { companyId: string }) {
         setStatus({
           state: "failed",
           profile: name,
-          reason: error instanceof Error ? error.message : "Could not start the sign-in.",
+          reason: errorMessage(error, "Could not start the sign-in."),
         });
         setBusy(null);
       }
@@ -233,7 +234,7 @@ function Panel({ companyId }: { companyId: string }) {
         if (result.ok) toast({ title: "Credential works", body: `${name} authenticated against the provider.`, tone: "success" });
         else toast({ title: "Credential failed", body: `${name}: ${result.reason ?? "the test did not pass."}`, tone: "error" });
       } catch (error) {
-        toast({ title: "The test could not run", body: error instanceof Error ? error.message : "", tone: "error" });
+        toast({ title: "The test could not run", body: errorMessage(error, ""), tone: "error" });
       } finally {
         setTesting(null);
       }
@@ -340,7 +341,7 @@ function UpdateRow({ toast }: { toast: ReturnType<typeof usePluginToast> }) {
       setSelf(await findSelf());
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not read the plugin's version.");
+      setError(errorMessage(e, "Could not read the plugin's version."));
     }
   }, []);
 
@@ -352,8 +353,17 @@ function UpdateRow({ toast }: { toast: ReturnType<typeof usePluginToast> }) {
     if (!self) return;
     setBusy(true);
     try {
-      const outcome = await upgradeSelf(self.id);
-      if (outcome.kind === "approval_required") {
+      const outcome = await upgradeSelf(self);
+      if (outcome.kind === "unchanged") {
+        toast({
+          title: self.localPath ? "Reloaded" : "Already up to date",
+          body: self.localPath
+            ? `Reloaded ${outcome.version} from ${self.localPath}. Put a newer build there to update.`
+            : `Version ${outcome.version} is the latest.`,
+          tone: "success",
+        });
+        void load();
+      } else if (outcome.kind === "approval_required") {
         toast({
           title: "Update needs approval",
           body: "The new version requests capabilities the installed one did not. An instance administrator has to approve it.",
@@ -372,13 +382,13 @@ function UpdateRow({ toast }: { toast: ReturnType<typeof usePluginToast> }) {
     } catch (e) {
       toast({
         title: "Update failed",
-        body: e instanceof Error ? e.message : "The upgrade did not complete.",
+        body: errorMessage(e, "The upgrade did not complete."),
         tone: "error",
       });
     } finally {
       setBusy(false);
     }
-  }, [self, toast]);
+  }, [self, toast, load]);
 
   if (error) return <div style={{ ...MUTED, marginBottom: 12 }}>{error}</div>;
   if (!self) return null;
@@ -402,20 +412,43 @@ function UpdateRow({ toast }: { toast: ReturnType<typeof usePluginToast> }) {
         </button>
       ) : (
         <>
-          {self.updateAvailable && self.latestVersion ? (
-            <StatusBadge label={`${self.latestVersion} available`} status="info" />
-          ) : self.latestVersion ? (
-            <span style={MUTED}>Up to date</span>
-          ) : (
-            <span style={MUTED}>Could not reach the registry</span>
-          )}
+          <UpdateState self={self} />
           <button type="button" style={SECONDARY} disabled={busy} onClick={() => void onUpdate()}>
-            {busy ? "Updating…" : self.updateAvailable ? "Update" : "Check and update"}
+            {busy
+              ? "Updating…"
+              : self.localPath
+                ? "Reload from folder"
+                : self.updateAvailable
+                  ? "Update"
+                  : "Check and update"}
           </button>
         </>
       )}
     </div>
   );
+}
+
+/**
+ * A local-folder install cannot be updated from npm: the host's upgrade
+ * re-reads the folder. Say so and name the folder, rather than showing a
+ * registry version the button cannot install.
+ */
+function UpdateState({ self }: { self: SelfInfo }) {
+  if (self.localPath) {
+    return (
+      <span style={MUTED}>
+        Installed from {self.localPath}
+        {self.latestVersion && isNewer(self.latestVersion, self.installedVersion)
+          ? ` (npm has ${self.latestVersion})`
+          : ""}
+      </span>
+    );
+  }
+  if (self.updateAvailable && self.latestVersion) {
+    return <StatusBadge label={`${self.latestVersion} available`} status="info" />;
+  }
+  if (self.latestVersion) return <span style={MUTED}>Up to date</span>;
+  return <span style={MUTED}>Could not reach the registry</span>;
 }
 
 function ActiveSignIn({

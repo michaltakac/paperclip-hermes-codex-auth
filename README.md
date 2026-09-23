@@ -76,6 +76,11 @@ If the new version requests capabilities the installed one did not, the host hol
 in `upgrade_pending` for an administrator. That is the capability gate working, and the
 panel says so rather than reporting a failure.
 
+A plugin installed from a **folder on the server** (a local-path install) cannot be updated
+from npm: the host's upgrade re-reads that folder. The panel shows the folder instead of a
+registry version, and the button reads **Reload from folder**. Put the new build in the
+folder first.
+
 ## Design notes
 
 **A PTY is mandatory.** Run with pipe stdio, the login emits *zero bytes* and waits — the
