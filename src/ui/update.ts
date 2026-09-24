@@ -26,6 +26,8 @@ interface PluginRecord {
   packageName: string;
   version: string;
   status: string;
+  /** Set only for a local-folder install; null for a registry (npm) install. */
+  packagePath?: string | null;
 }
 
 export interface SelfInfo {
@@ -36,6 +38,12 @@ export interface SelfInfo {
    *  not an error state, it just cannot be told whether an update exists. */
   latestVersion?: string;
   updateAvailable: boolean;
+  /**
+   * Set when the plugin was installed from a folder on the server. The host's
+   * upgrade then re-reads that folder and never contacts npm, so the panel must
+   * not promise a registry update it cannot deliver.
+   */
+  localPath?: string;
 }
 
 async function json<T>(url: string, init?: RequestInit): Promise<T> {
@@ -53,7 +61,7 @@ async function json<T>(url: string, init?: RequestInit): Promise<T> {
   }
   if (!response.ok) {
     const message =
-      (body as { error?: string } | null)?.error ??
+      (body as { error?: string } | null)?.error ||
       (response.status === 403
         ? "Updating a plugin requires an instance administrator."
         : `The request failed (${response.status}).`);
@@ -97,6 +105,8 @@ export async function findSelf(): Promise<SelfInfo> {
     plugins.find((p) => p.pluginKey?.includes("hermes-codex-auth"));
   if (!self) throw new Error("Could not find this plugin's own installation record.");
 
+  const localPath = self.packagePath || undefined;
+
   let latestVersion: string | undefined;
   try {
     const meta = await fetch(`https://registry.npmjs.org/${PACKAGE_NAME}/latest`, {
@@ -113,7 +123,8 @@ export async function findSelf(): Promise<SelfInfo> {
     installedVersion: self.version,
     status: self.status,
     latestVersion,
-    updateAvailable: latestVersion ? isNewer(latestVersion, self.version) : false,
+    updateAvailable: !localPath && latestVersion ? isNewer(latestVersion, self.version) : false,
+    localPath,
   };
 }
 
@@ -130,11 +141,18 @@ export type UpgradeOutcome =
  * one did not, and the host is holding it for an operator decision — that is
  * the gate working, not a failure, so it is reported as its own outcome.
  */
-export async function upgradeSelf(pluginId: string, version?: string): Promise<UpgradeOutcome> {
+export async function upgradeSelf(
+  self: Pick<SelfInfo, "id" | "installedVersion">,
+  version?: string,
+): Promise<UpgradeOutcome> {
   const result = await json<{ status?: string; version?: string }>(
-    `/api/plugins/${pluginId}/upgrade`,
+    `/api/plugins/${self.id}/upgrade`,
     { method: "POST", body: JSON.stringify(version ? { version } : {}) },
   );
   if (result?.status === "upgrade_pending") return { kind: "approval_required" };
-  return { kind: "upgraded", version: result?.version ?? "" };
+  const next = result?.version ?? "";
+  // The host reports success even when it reinstalled the version already
+  // running. Calling that "Updated" would be a lie the user acts on.
+  if (next && next === self.installedVersion) return { kind: "unchanged", version: next };
+  return { kind: "upgraded", version: next };
 }
